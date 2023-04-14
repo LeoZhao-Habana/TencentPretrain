@@ -215,6 +215,7 @@ def deepspeed_opts(parser):
     parser.add_argument("--deepspeed_checkpoint_layers_num", type=int, default=1,
                         help="chunk size (number of layers) for checkpointing.")
     parser.add_argument("--local_rank", type=int, required=False)
+    parser.add_argument("--use_hpu", action="store_true", help=".")
 
 
 def adv_opts(parser):

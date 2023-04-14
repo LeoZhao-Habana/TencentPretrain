@@ -10,6 +10,42 @@ from tencentpretrain.utils.optimizers import *
 from tencentpretrain.utils import *
 from tencentpretrain.utils.seed import set_seed
 
+try:
+    import habana_frameworks.torch.core as htcore
+    import habana_frameworks.torch.hpu as hthpu
+except:
+    print('INFO: no habana framework package installed')
+
+import gc
+import torch.distributed as dist
+
+def see_memory_usage(message, force=True, use_hpu=False):
+    if not force:
+        return
+    if dist.is_initialized() and not dist.get_rank() == 0:
+        return
+
+    # python doesn't do real-time garbage collection so do it explicitly to get the correct RAM reports
+    gc.collect()
+
+    # Print message except when distributed but not rank 0
+    print(message)
+    if use_hpu:
+        print(
+            f"MA {round(hthpu.memory_allocated() / (1024 * 1024),2 )} MB \
+            Max_MA {round(hthpu.max_memory_allocated() / (1024 * 1024),2)} MB ")
+
+        # get the peak memory to report correct data, so reset the counter for the next call
+        hthpu.reset_peak_memory_stats()
+    else:
+        print(
+            f"MA {round(torch.cuda.memory_allocated() / (1024 * 1024),2 )} MB \
+            Max_MA {round(torch.cuda.max_memory_allocated() / (1024 * 1024),2)} MB")
+
+        # get the peak memory to report correct data, so reset the counter for the next call
+        if hasattr(torch.cuda, "reset_peak_memory_stats"):  # pytorch 1.4+
+            torch.cuda.reset_peak_memory_stats()
+
 
 def train_and_validate(args):
     set_seed(args.seed)
@@ -103,9 +139,14 @@ class Trainer(object):
             if gpu_id is not None:
                 for i in range(len(batch)):
                     if torch.is_tensor(batch[i]):
-                        batch[i] = batch[i].cuda(gpu_id)
+                        batch[i] = batch[i].to("hpu", non_blocking=True)
 
+            force = False
+            htcore.mark_step()
+            see_memory_usage(f'Step {self.current_step}: Before FWD:', force=force, use_hpu=args.use_hpu)
             loss = self.forward_propagation(batch, model)
+            htcore.mark_step()
+            see_memory_usage(f'Step {self.current_step}: After FWD:', force=force, use_hpu=args.use_hpu)
 
             if args.deepspeed:
                 model.backward(loss)
@@ -116,6 +157,9 @@ class Trainer(object):
                 else:
                     loss.backward()
 
+            htcore.mark_step()
+            see_memory_usage(f'Step {self.current_step}: After BWD:', force=force, use_hpu=args.use_hpu)
+
             if self.current_step % self.accumulation_steps == 0:
                 if args.deepspeed:
                     model.step()
@@ -123,6 +167,9 @@ class Trainer(object):
                     optimizer.step()
                     scheduler.step()
                     model.zero_grad()
+
+            htcore.mark_step()
+            see_memory_usage(f'Step {self.current_step}: After STEP:', force=force, use_hpu=args.use_hpu)
 
             if self.current_step % self.report_steps == 0 and \
                     (not self.dist_train or (self.dist_train and rank == 0)):
@@ -557,7 +604,8 @@ def worker(proc_id, gpu_ranks, args, model_for_training, model_for_dataloader=No
 
     if args.deepspeed:
         import deepspeed
-        deepspeed.init_distributed(dist_backend=args.backend)
+        import habana_frameworks.torch.distributed.hccl
+        deepspeed.init_distributed(dist_backend=args.backend, init_method="env://")
         rank = dist.get_rank()
         gpu_id = proc_id
     elif args.dist_train:

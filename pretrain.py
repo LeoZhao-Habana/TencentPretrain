@@ -3,7 +3,7 @@ import torch
 import tencentpretrain.trainer as trainer
 from tencentpretrain.utils.config import load_hyperparam
 from tencentpretrain.opts import *
-
+import habana_frameworks.torch.core as htcore
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -66,7 +66,7 @@ def main():
     parser.add_argument("--gpu_ranks", default=[], nargs='+', type=int, help="List of ranks of each process."
                         " Each process has a unique integer rank whose value is in the interval [0, world_size), and runs in a single GPU.")
     parser.add_argument("--master_ip", default="tcp://localhost:12345", type=str, help="IP-Port of master for training.")
-    parser.add_argument("--backend", choices=["nccl", "gloo"], default="nccl", type=str, help="Distributed backend.")
+    parser.add_argument("--backend", choices=["nccl", "gloo", "hccl"], default="nccl", type=str, help="Distributed backend.")
 
     # Deepspeed options.
     deepspeed_opts(parser)

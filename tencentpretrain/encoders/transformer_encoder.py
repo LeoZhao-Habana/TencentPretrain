@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from tencentpretrain.utils.rope import precompute_freqs_cis
+from tencentpretrain.utils.rope import precompute_freqs_cis, precompute_freqs_cis_new
 from tencentpretrain.layers.transformer import TransformerLayer
 from tencentpretrain.layers.layer_norm import *
 from tencentpretrain.layers.relative_position_embedding import RelativePositionEmbedding
@@ -48,7 +48,8 @@ class TransformerEncoder(nn.Module):
             self.relative_pos_emb = RelativePositionEmbedding(bidirectional=True, heads_num=args.heads_num,
                                                               num_buckets=args.relative_attention_buckets_num)
         elif self.rotary_position_embedding:
-            self.freqs_cis = precompute_freqs_cis(args.hidden_size // args.heads_num, args.max_seq_length * 2)
+            # self.freqs_cis = precompute_freqs_cis(args.hidden_size // args.heads_num, args.max_seq_length * 2)
+            self.freqs_cache = precompute_freqs_cis_new(args.hidden_size // args.heads_num, args.max_seq_length)
 
 
     def forward(self, emb, seg):
@@ -103,7 +104,8 @@ class TransformerEncoder(nn.Module):
             position_bias = None
 
         if self.rotary_position_embedding:
-            freqs_cis = self.freqs_cis[:seq_length].to(hidden.device)
+            # freqs_cis = self.freqs_cis[:seq_length].cpu()
+            freqs_cis = [self.freqs_cache[0][:seq_length], self.freqs_cache[1][:seq_length]]
         else:
             freqs_cis = None
 

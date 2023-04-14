@@ -1,7 +1,7 @@
 import math
 import torch
 import torch.nn as nn
-from tencentpretrain.utils.rope import apply_rotary_emb
+from tencentpretrain.utils.rope import apply_rotary_emb, apply_rotary_emb_new
 
 
 class MultiHeadedAttention(nn.Module):
@@ -59,7 +59,10 @@ class MultiHeadedAttention(nn.Module):
                              for l, x in zip(self.linear_layers, (query, key, value))
                             ]
         if freqs_cis is not None:
-            query, key = apply_rotary_emb(query.transpose(1,2), key.transpose(1,2), freqs_cis=freqs_cis)
+            # query, key = apply_rotary_emb(query.transpose(1,2), key.transpose(1,2), freqs_cis=freqs_cis)
+            query, key = apply_rotary_emb_new(query, key, freqs_cis=freqs_cis)
+            # print(f"diff: {torch.max(abs(query-query0))}, {torch.max(abs(key-key0))}" )
+
         scores = torch.matmul(query, key.transpose(-2, -1))
         if position_bias is not None:
             scores = scores + position_bias

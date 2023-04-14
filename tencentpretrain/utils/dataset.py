@@ -446,7 +446,7 @@ class LmDataset(Dataset):
                 pos += 1
 
                 document = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(line.strip()))
-                document = [self.vocab.get(CLS_TOKEN)] + document + [self.vocab.get(SEP_TOKEN)]
+                document = [0] + document + [0]
 
                 instances_num = len(document) // (self.seq_length + 1)
                 for i in range(instances_num):
